@@ -1,13 +1,16 @@
 import React from 'react';
 import SpeedTest from './components/SpeedTest';
+import { Navbar } from './components/Navbar';
+import { Footer } from './components/Footer';
 
 function App() {
   return (
-    <div className='bg-gray-100 min-h-screen'>
-      <SpeedTest />
-      <footer className='text-center py-4 bg-gray-200'>
-        Made with ❤️ by Henry
-      </footer>
+    <div className="min-h-screen bg-gray-50">
+      <Navbar />
+      <main className="container mx-auto px-4 py-8">
+        <SpeedTest />
+      </main>
+      <Footer />
     </div>
   );
 }
