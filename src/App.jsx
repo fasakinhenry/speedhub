@@ -1,7 +1,15 @@
-export default function App() {
+import React from "react";
+import NetworkSpeed from "./components/NetworkSpeed";
+
+function App() {
   return (
-    <h1 className="text-3xl font-bold underline">
-      Hello world!
-    </h1>
-  )
+    <div>
+      <NetworkSpeed />
+      <footer className="fixed bottom-0 w-full text-center py-4 bg-gray-200 text-gray-700">
+        Made with 💖✨ by Fasakin Henry
+      </footer>
+    </div>
+  );
 }
+
+export default App;
