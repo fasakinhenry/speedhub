@@ -1,12 +1,12 @@
-import React from "react";
-import NetworkSpeed from "./components/NetworkSpeed";
+import React from 'react';
+import SpeedTest from './components/SpeedTest';
 
 function App() {
   return (
-    <div>
-      <NetworkSpeed />
-      <footer className="fixed bottom-0 w-full text-center py-4 bg-gray-200 text-gray-700">
-        Made with 💖✨ by Fasakin Henry
+    <div className='bg-gray-100 min-h-screen'>
+      <SpeedTest />
+      <footer className='text-center py-4 bg-gray-200'>
+        Made with ❤️ by Henry
       </footer>
     </div>
   );
