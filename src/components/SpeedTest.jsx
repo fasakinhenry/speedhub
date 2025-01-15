@@ -1,119 +1,205 @@
-import React, { useState, useEffect } from "react";
-import { motion } from "framer-motion";
-import { FaDownload, FaUpload, FaWifi } from "react-icons/fa";
+import React, { useState, useEffect, useRef } from 'react';
+import SpeedTest from '@cloudflare/speedtest'; // Changed this line - correct import
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts';
+import LocationMap from './LocationMap';
+import MetricsDisplay from './MetricsDisplay';
+import TestControls from './TestControls';
 
-const SpeedTest = () => {
-  const [downloadSpeed, setDownloadSpeed] = useState(null);
-  const [uploadSpeed, setUploadSpeed] = useState(null);
-  const [ping, setPing] = useState(null);
-  const [provider, setProvider] = useState(null);
-  const [ipAddress, setIpAddress] = useState(null);
-  const [testing, setTesting] = useState(false);
+const SpeedTestComponent = () => {
+  // Renamed to avoid naming conflict
+  const [metrics, setMetrics] = useState({
+    download: 0,
+    upload: 0,
+    latency: 0,
+    jitter: 0,
+    packetLoss: 0,
+  });
+  const [testStatus, setTestStatus] = useState('idle');
+  const [downloadData, setDownloadData] = useState([]);
+  const [uploadData, setUploadData] = useState([]);
+  const speedTestRef = useRef(null);
 
   useEffect(() => {
-    const fetchNetworkDetails = async () => {
-      try {
-        const ipResponse = await fetch("https://api.ipify.org?format=json");
-        const { ip } = await ipResponse.json();
-        setIpAddress(ip);
+    // Initialize SpeedTest with proper configuration
+    speedTestRef.current = new SpeedTest({
+      autoStart: false,
+      measurements: [
+        { type: 'latency', numPackets: 20 },
+        { type: 'download', bytes: 1e5, count: 8 },
+        { type: 'download', bytes: 1e6, count: 8 },
+        { type: 'download', bytes: 1e7, count: 6 },
+        { type: 'upload', bytes: 1e5, count: 8 },
+        { type: 'upload', bytes: 1e6, count: 6 },
+        { type: 'upload', bytes: 1e7, count: 4 },
+        { type: 'packetLoss', numPackets: 1000, responsesWaitTime: 3000 },
+      ],
+      measureDownloadLoadedLatency: true,
+      measureUploadLoadedLatency: true,
+    });
 
-        const providerResponse = await fetch(
-          `https://ipapi.co/${ip}/json/`
-        );
-        const providerData = await providerResponse.json();
-        setProvider(providerData.org || "Unknown Provider");
-      } catch (error) {
-        console.error("Error fetching network details:", error);
-        setProvider("Error fetching provider");
+    // Rest of the code remains the same...
+    speedTestRef.current.onResultsChange = ({ type }) => {
+      const results = speedTestRef.current.results;
+
+      switch (type) {
+        case 'download':
+          const downloadPoint = results
+            .getDownloadBandwidthPoints()
+            .slice(-1)[0];
+          if (downloadPoint) {
+            const mbps = (downloadPoint.bps / 1000000).toFixed(2);
+            setMetrics((prev) => ({ ...prev, download: mbps }));
+            setDownloadData((prev) => [
+              ...prev,
+              {
+                time: prev.length,
+                speed: parseFloat(mbps),
+              },
+            ]);
+          }
+          break;
+
+        case 'upload':
+          const uploadPoint = results.getUploadBandwidthPoints().slice(-1)[0];
+          if (uploadPoint) {
+            const mbps = (uploadPoint.bps / 1000000).toFixed(2);
+            setMetrics((prev) => ({ ...prev, upload: mbps }));
+            setUploadData((prev) => [
+              ...prev,
+              {
+                time: prev.length,
+                speed: parseFloat(mbps),
+              },
+            ]);
+          }
+          break;
+
+        case 'latency':
+          const latency = results.getUnloadedLatency();
+          const jitter = results.getUnloadedJitter();
+          if (latency) {
+            setMetrics((prev) => ({
+              ...prev,
+              latency: latency.toFixed(1),
+              jitter: jitter ? jitter.toFixed(1) : prev.jitter,
+            }));
+          }
+          break;
+
+        case 'packetLoss':
+          const packetLoss = results.getPacketLoss();
+          if (packetLoss !== null) {
+            setMetrics((prev) => ({
+              ...prev,
+              packetLoss: (packetLoss * 100).toFixed(1),
+            }));
+          }
+          break;
       }
     };
 
-    fetchNetworkDetails();
+    speedTestRef.current.onFinish = () => {
+      setTestStatus('completed');
+      // Get final scores
+      const scores = speedTestRef.current.results.getScores();
+      console.log('Test completed. Scores:', scores);
+    };
+
+    speedTestRef.current.onError = (error) => {
+      console.error('Speed test error:', error);
+      setTestStatus('error');
+    };
+
+    return () => {
+      if (speedTestRef.current) {
+        speedTestRef.current.pause();
+      }
+    };
   }, []);
 
-  const testSpeed = async () => {
-    setTesting(true);
+  const startTest = () => {
+    setTestStatus('running');
+    setDownloadData([]);
+    setUploadData([]);
+    setMetrics({
+      download: 0,
+      upload: 0,
+      latency: 0,
+      jitter: 0,
+      packetLoss: 0,
+    });
 
     try {
-      // Simulate real download speed test
-      const downloadStartTime = Date.now();
-      await fetch("https://via.placeholder.com/1000");
-      const downloadDuration = (Date.now() - downloadStartTime) / 1000;
-      const fileSize = 1000 * 1000 * 8; // 1MB in bits
-      setDownloadSpeed((fileSize / downloadDuration / (1024 * 1024)).toFixed(2));
-
-      // Simulate upload and ping
-      setTimeout(() => {
-        setUploadSpeed((Math.random() * 50).toFixed(2)); // Simulated upload speed
-        setPing(Math.floor(Math.random() * 100)); // Simulated ping
-        setTesting(false);
-      }, 2000);
+      speedTestRef.current.restart();
     } catch (error) {
-      console.error("Error testing speed:", error);
-      setDownloadSpeed("Error");
-      setUploadSpeed("Error");
-      setPing("Error");
-      setTesting(false);
+      console.error('Failed to start speed test:', error);
+      setTestStatus('error');
     }
   };
 
+  const pauseTest = () => {
+    speedTestRef.current?.pause();
+    setTestStatus('paused');
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center h-screen bg-gray-50 p-6">
-      <motion.h1
-        className="text-4xl font-bold mb-8 text-blue-600"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-      >
-        SpeedHub
-      </motion.h1>
+    <div className='space-y-8'>
+      <MetricsDisplay metrics={metrics} />
 
-      <button
-        onClick={testSpeed}
-        disabled={testing}
-        className={`px-6 py-3 rounded-md shadow-md text-white text-lg ${
-          testing ? "bg-gray-400" : "bg-blue-600 hover:bg-blue-700"
-        }`}
-      >
-        {testing ? "Testing..." : "Start Speed Test"}
-      </button>
+      <TestControls
+        status={testStatus}
+        onStart={startTest}
+        onPause={pauseTest}
+      />
 
-      <motion.div
-        className="mt-10 w-full max-w-lg p-6 bg-white rounded-lg shadow-lg"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-      >
-        <h2 className="text-2xl font-semibold mb-4 text-gray-800">
-          Test Results
-        </h2>
-        <div className="flex items-center gap-4 mb-4">
-          <FaDownload className="text-blue-500 text-3xl" />
-          <p className="text-gray-700">
-            <strong>Download Speed:</strong>{" "}
-            {downloadSpeed ? `${downloadSpeed} Mbps` : "N/A"}
-          </p>
+      <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
+        <div className='bg-white p-6 rounded-lg shadow-lg'>
+          <h3 className='text-lg font-semibold mb-4'>Download Speed</h3>
+          <ResponsiveContainer width='100%' height={200}>
+            <LineChart data={downloadData}>
+              <XAxis dataKey='time' />
+              <YAxis domain={[0, 'auto']} />
+              <Tooltip formatter={(value) => `${value} Mbps`} />
+              <Line
+                type='monotone'
+                dataKey='speed'
+                stroke='#FF6B6B'
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-        <div className="flex items-center gap-4 mb-4">
-          <FaUpload className="text-green-500 text-3xl" />
-          <p className="text-gray-700">
-            <strong>Upload Speed:</strong>{" "}
-            {uploadSpeed ? `${uploadSpeed} Mbps` : "N/A"}
-          </p>
+
+        <div className='bg-white p-6 rounded-lg shadow-lg'>
+          <h3 className='text-lg font-semibold mb-4'>Upload Speed</h3>
+          <ResponsiveContainer width='100%' height={200}>
+            <LineChart data={uploadData}>
+              <XAxis dataKey='time' />
+              <YAxis domain={[0, 'auto']} />
+              <Tooltip formatter={(value) => `${value} Mbps`} />
+              <Line
+                type='monotone'
+                dataKey='speed'
+                stroke='#4ECDC4'
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </div>
-        <div className="flex items-center gap-4 mb-4">
-          <FaWifi className="text-yellow-500 text-3xl" />
-          <p className="text-gray-700">
-            <strong>Ping:</strong> {ping ? `${ping} ms` : "N/A"}
-          </p>
-        </div>
-        <p className="text-gray-700">
-          <strong>Network Provider:</strong> {provider || "N/A"}
-        </p>
-        <p className="text-gray-700">
-          <strong>IP Address:</strong> {ipAddress || "N/A"}
-        </p>
-      </motion.div>
+      </div>
     </div>
   );
 };
 
-export default SpeedTest;
+export default SpeedTestComponent;
