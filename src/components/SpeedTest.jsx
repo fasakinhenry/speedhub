@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import SpeedTest from '@cloudflare/speedtest'; // Changed this line - correct import
+import SpeedTest from '@cloudflare/speedtest';
 import {
   LineChart,
   Line,
