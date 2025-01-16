@@ -25,8 +25,20 @@ const SpeedTestComponent = () => {
   const [testStatus, setTestStatus] = useState('idle');
   const [downloadData, setDownloadData] = useState([]);
   const [uploadData, setUploadData] = useState([]);
-  const [serverInfo, setServerInfo] = useState(null);
-  const [networkScores, setNetworkScores] = useState(null);
+  const [serverInfo, setServerInfo] = useState({
+    city: '...',
+    country: '...',
+    ip: '...',
+    protocol: '...',
+    isp: '...',
+    latitude: null,
+    longitude: null,
+  });
+  const [networkScores, setNetworkScores] = useState({
+    gaming: '?',
+    streaming: '?',
+    rtc: '?',
+  });
   const speedTestRef = useRef(null);
 
   const initializeSpeedTest = () => {
@@ -185,13 +197,22 @@ const SpeedTestComponent = () => {
       jitter: 0,
       packetLoss: 0,
     });
-    setNetworkScores(null);
-    setServerInfo(null);
+    setNetworkScores({
+      gaming: '?',
+      streaming: '?',
+      rtc: '?',
+    });
+    setServerInfo({
+      city: '...',
+      country: '...',
+      ip: '...',
+      protocol: '...',
+      isp: '...',
+      latitude: null,
+      longitude: null,
+    });
 
     try {
-      // Reinitialize the speed test instance
-      initializeSpeedTest();
-      // Start the test
       speedTestRef.current.restart();
     } catch (error) {
       console.error('Failed to start speed test:', error);
@@ -217,13 +238,11 @@ const SpeedTestComponent = () => {
       />
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
-        {serverInfo && <ServerInfo serverInfo={serverInfo} />}
-        {networkScores && <NetworkQuality scores={networkScores} />}
+        <ServerInfo serverInfo={serverInfo} />
+        <NetworkQuality scores={networkScores} />
       </div>
 
-      {serverInfo && serverInfo.latitude && serverInfo.longitude && (
-        <LocationMap serverInfo={serverInfo} />
-      )}
+      <LocationMap serverInfo={serverInfo} />
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
         <div className='bg-white p-6 rounded-lg shadow-lg'>
