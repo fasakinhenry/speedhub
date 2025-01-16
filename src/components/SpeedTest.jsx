@@ -11,9 +11,10 @@ import {
 import LocationMap from './LocationMap';
 import MetricsDisplay from './MetricsDisplay';
 import TestControls from './TestControls';
+import ServerInfo from './ServerInfo';
+import NetworkQuality from './NetworkQuality';
 
 const SpeedTestComponent = () => {
-  // Renamed to avoid naming conflict
   const [metrics, setMetrics] = useState({
     download: 0,
     upload: 0,
@@ -24,10 +25,15 @@ const SpeedTestComponent = () => {
   const [testStatus, setTestStatus] = useState('idle');
   const [downloadData, setDownloadData] = useState([]);
   const [uploadData, setUploadData] = useState([]);
+  const [serverInfo, setServerInfo] = useState(null);
+  const [networkScores, setNetworkScores] = useState(null);
   const speedTestRef = useRef(null);
 
-  useEffect(() => {
-    // Initialize SpeedTest with proper configuration
+  const initializeSpeedTest = () => {
+    if (speedTestRef.current) {
+      speedTestRef.current.pause();
+    }
+
     speedTestRef.current = new SpeedTest({
       autoStart: false,
       measurements: [
@@ -44,7 +50,18 @@ const SpeedTestComponent = () => {
       measureUploadLoadedLatency: true,
     });
 
-    // Rest of the code remains the same...
+    speedTestRef.current.onConnect = (info) => {
+      setServerInfo({
+        city: info.city || 'Unknown City',
+        country: info.country || 'Unknown Country',
+        ip: info.ip || 'Unknown IP',
+        protocol: info.ipVersion === 6 ? 'IPv6' : 'IPv4',
+        isp: info.isp || 'Unknown ISP',
+        latitude: info.latitude,
+        longitude: info.longitude,
+      });
+    };
+
     speedTestRef.current.onResultsChange = ({ type }) => {
       const results = speedTestRef.current.results;
 
@@ -107,22 +124,55 @@ const SpeedTestComponent = () => {
 
     speedTestRef.current.onFinish = () => {
       setTestStatus('completed');
-      // Get final scores
-      const scores = speedTestRef.current.results.getScores();
-      console.log('Test completed. Scores:', scores);
+      calculateNetworkScores();
     };
 
     speedTestRef.current.onError = (error) => {
       console.error('Speed test error:', error);
       setTestStatus('error');
     };
+  };
 
+  useEffect(() => {
+    initializeSpeedTest();
     return () => {
       if (speedTestRef.current) {
         speedTestRef.current.pause();
       }
     };
   }, []);
+
+  const calculateNetworkScores = () => {
+    const download = parseFloat(metrics.download);
+    const upload = parseFloat(metrics.upload);
+    const latency = parseFloat(metrics.latency);
+    const jitter = parseFloat(metrics.jitter);
+    const packetLoss = parseFloat(metrics.packetLoss);
+
+    const gamingScore = Math.round(
+      (Math.max(0, 100 - latency / 2) +
+        Math.max(0, 100 - jitter * 5) +
+        Math.max(0, 100 - packetLoss * 10)) /
+        3
+    );
+
+    const streamingScore = Math.round(
+      Math.min(100, (download / 25) * 100) * 0.8 +
+        Math.min(100, (upload / 5) * 100) * 0.2
+    );
+
+    const rtcScore = Math.round(
+      Math.max(0, 100 - latency / 2) * 0.4 +
+        Math.max(0, 100 - jitter * 5) * 0.3 +
+        Math.min(100, (upload / 5) * 100) * 0.3
+    );
+
+    setNetworkScores({
+      gaming: gamingScore,
+      streaming: streamingScore,
+      rtc: rtcScore,
+    });
+  };
 
   const startTest = () => {
     setTestStatus('running');
@@ -135,8 +185,13 @@ const SpeedTestComponent = () => {
       jitter: 0,
       packetLoss: 0,
     });
+    setNetworkScores(null);
+    setServerInfo(null);
 
     try {
+      // Reinitialize the speed test instance
+      initializeSpeedTest();
+      // Start the test
       speedTestRef.current.restart();
     } catch (error) {
       console.error('Failed to start speed test:', error);
@@ -145,8 +200,10 @@ const SpeedTestComponent = () => {
   };
 
   const pauseTest = () => {
-    speedTestRef.current?.pause();
-    setTestStatus('paused');
+    if (speedTestRef.current) {
+      speedTestRef.current.pause();
+      setTestStatus('paused');
+    }
   };
 
   return (
@@ -158,6 +215,15 @@ const SpeedTestComponent = () => {
         onStart={startTest}
         onPause={pauseTest}
       />
+
+      <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
+        {serverInfo && <ServerInfo serverInfo={serverInfo} />}
+        {networkScores && <NetworkQuality scores={networkScores} />}
+      </div>
+
+      {serverInfo && serverInfo.latitude && serverInfo.longitude && (
+        <LocationMap serverInfo={serverInfo} />
+      )}
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-8'>
         <div className='bg-white p-6 rounded-lg shadow-lg'>
